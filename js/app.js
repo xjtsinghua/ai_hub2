@@ -1,8 +1,10 @@
 /**
  * AI Hub · 主交互
- *  - Tab 切换 / 搜索筛选 / 卡片渲染
+ *  - 一级 Tab 切换 / 搜索筛选 / 卡片渲染
+ *  - 学术板块支持二级 Tab（搜索/追踪/门户/期刊）
  *  - 卡片点击 → 打开官网
- *  - "安装"按钮 → 弹出安装说明
+ *  - 期刊卡片 → IF 徽章 + 直达最新文章
+ *  - "安装方法"按钮 → 弹出安装/订阅说明
  *  - 安装说明一键复制
  */
 (function () {
@@ -17,12 +19,14 @@
   // ===== 状态 =====
   const state = {
     activeCategory: 'models',
+    activeSubTab: 'all',
     keyword: '',
     activeTag: null,
   };
 
   // ===== DOM 引用 =====
   const $tabs         = document.getElementById('tabs');
+  const $subTabs      = document.getElementById('subTabs');
   const $grid         = document.getElementById('grid');
   const $search       = document.getElementById('searchInput');
   const $clearBtn     = document.getElementById('clearSearch');
@@ -56,18 +60,29 @@
       .replace(/'/g, '&#39;');
   }
 
-  function getList(category) {
-    return (DATA[category] || []).slice().sort((a, b) => {
-      const va = a.downloads != null ? a.downloads : a.hot != null ? a.hot : 0;
-      const vb = b.downloads != null ? b.downloads : b.hot != null ? b.hot : 0;
-      return vb - va;
+  function getList(category, subTab) {
+    let list = (DATA[category] || []).slice();
+    // 学术板块：按 type 过滤
+    if (category === 'academic' && subTab && subTab !== 'all') {
+      list = list.filter(it => it.type === subTab);
+    }
+    return list.sort((a, b) => {
+      // 期刊按 IF 降序
+      if (category === 'academic') {
+        const va = parseFloat(a.if) || 0;
+        const vb = parseFloat(b.if) || 0;
+        if (vb !== va) return vb - va;
+      }
+      const da = a.downloads != null ? a.downloads : a.hot != null ? a.hot : 0;
+      const db = b.downloads != null ? b.downloads : b.hot != null ? b.hot : 0;
+      return db - da;
     });
   }
 
   function matchKeyword(item, kw) {
     if (!kw) return true;
     const haystack = [
-      item.name, item.nameEn, item.desc, item.url,
+      item.name, item.nameEn, item.desc, item.url, item.publisher, item.issn,
       ...(item.tags || []),
     ].join(' ').toLowerCase();
     return haystack.includes(kw.toLowerCase());
@@ -84,7 +99,7 @@
     `;
   }
 
-  // ===== Tabs =====
+  // ===== 一级 Tabs =====
   function renderTabs() {
     $tabs.innerHTML = Object.values(DATA.categories)
       .map(cat => {
@@ -104,7 +119,44 @@
       el.addEventListener('click', () => {
         state.activeCategory = el.dataset.cat;
         state.activeTag = null;
+        state.activeSubTab = 'all';
         renderTabs();
+        renderSubTabs();
+        renderGrid();
+      });
+    });
+  }
+
+  // ===== 二级 Sub Tabs（学术板块专用） =====
+  function renderSubTabs() {
+    const cat = DATA.categories[state.activeCategory];
+    if (!cat || !cat.hasSubTabs || !cat.subTabs) {
+      $subTabs.classList.add('hidden');
+      $subTabs.innerHTML = '';
+      return;
+    }
+    $subTabs.classList.remove('hidden');
+    $subTabs.innerHTML = cat.subTabs
+      .map(st => {
+        const isActive = state.activeSubTab === st.key;
+        const count = st.key === 'all'
+          ? (DATA[cat.key] || []).length
+          : (DATA[cat.key] || []).filter(it => it.type === st.key).length;
+        return `
+          <button class="sub-tab ${isActive ? 'active' : ''}" data-sub="${st.key}">
+            <span>${st.icon}</span>
+            <span>${st.label}</span>
+            <span class="count">${count}</span>
+          </button>
+        `;
+      })
+      .join('');
+
+    $subTabs.querySelectorAll('.sub-tab').forEach(el => {
+      el.addEventListener('click', () => {
+        state.activeSubTab = el.dataset.sub;
+        state.activeTag = null;
+        renderSubTabs();
         renderGrid();
       });
     });
@@ -112,7 +164,7 @@
 
   // ===== 卡片 =====
   function renderGrid() {
-    const list = getList(state.activeCategory).filter(item => {
+    const list = getList(state.activeCategory, state.activeSubTab).filter(item => {
       if (!matchKeyword(item, state.keyword)) return false;
       if (state.activeTag && !(item.tags || []).includes(state.activeTag)) return false;
       return true;
@@ -126,51 +178,93 @@
     $empty.classList.add('hidden');
 
     $grid.innerHTML = list
-      .map((item, idx) => {
-        const rank = idx + 1;
-        const rankClass = rank <= 3 ? `rank-${rank}` : '';
-        const count = item.downloads != null ? fmtNumber(item.downloads) + ' 下载' : (item.hot != null ? '🔥 热门' : '');
-        const tags = (item.tags || [])
-          .map(t => `<span class="tag ${state.activeTag === t ? 'tag-active' : ''}" data-tag="${escapeHTML(t)}">${escapeHTML(t)}</span>`)
-          .join('');
-
-        return `
-          <article class="card ${rankClass}" style="--card-bg:${escapeHTML(item.color || '#7c5cff')}22; --card-glow:${escapeHTML(item.color || '#7c5cff')}">
-            <span class="rank">#${rank}</span>
-            <div class="icon" style="background:${escapeHTML(item.color || '#7c5cff')}33">${escapeHTML(item.icon || '📦')}</div>
-            <h3 class="card-name">${escapeHTML(item.name)}</h3>
-            <p class="card-name-en">${escapeHTML(item.nameEn || '')}</p>
-            <p class="card-desc">${escapeHTML(item.desc || '')}</p>
-            <div class="tags">${tags}</div>
-            <div class="card-foot">
-              <span class="dl">${count ? '⬇ ' + count : '&nbsp;'}</span>
-              <button class="btn-install" data-install="${escapeHTML(item.name)}">安装方法 →</button>
-            </div>
-          </article>
-        `;
-      })
+      .map((item, idx) => renderCard(item, idx))
       .join('');
 
     bindCardEvents();
   }
 
+  function renderCard(item, idx) {
+    const rank = idx + 1;
+    const rankClass = rank <= 3 ? `rank-${rank}` : '';
+    const tags = (item.tags || [])
+      .map(t => `<span class="tag ${state.activeTag === t ? 'tag-active' : ''}" data-tag="${escapeHTML(t)}">${escapeHTML(t)}</span>`)
+      .join('');
+    const isJournal = item.type === 'journal';
+    const cardClass = `card ${rankClass} ${isJournal ? 'card-journal' : ''}`;
+
+    // 期刊专属：IF 徽章 / 出版方 / 直达最新
+    let metaHTML = '';
+    if (isJournal) {
+      const ifBadge = item.if
+        ? `<span class="if-badge" title="影响影子 (IF)">IF ${escapeHTML(item.if)}</span>`
+        : '';
+      const jcrBadge = item.jcr
+        ? `<span class="jcr-badge jcr-${escapeHTML(item.jcr.toLowerCase())}">${escapeHTML(item.jcr)}</span>`
+        : '';
+      const publisher = item.publisher
+        ? `<span class="pub">${escapeHTML(item.publisher)}</span>`
+        : '';
+      metaHTML = `<div class="journal-meta">${ifBadge}${jcrBadge}${publisher}</div>`;
+    }
+
+    // 底部统计
+    let count = '';
+    if (item.downloads != null) {
+      count = '⬇ ' + fmtNumber(item.downloads) + ' 下载';
+    } else if (item.hot != null) {
+      count = '🔥 热门';
+    } else if (isJournal && item.if) {
+      count = '📊 IF ' + escapeHTML(item.if);
+    }
+
+    // 按钮文本：期刊 = "最新文章 →"，其他 = "安装方法 →"
+    const btnText = isJournal ? '📰 最新文章' : '安装方法 →';
+    const btnClass = isJournal ? 'btn-install btn-latest' : 'btn-install';
+
+    return `
+      <article class="${cardClass}" style="--card-bg:${escapeHTML(item.color || '#7c5cff')}22; --card-glow:${escapeHTML(item.color || '#7c5cff')}">
+        <span class="rank">#${rank}</span>
+        <div class="icon" style="background:${escapeHTML(item.color || '#7c5cff')}33">${escapeHTML(item.icon || '📦')}</div>
+        <h3 class="card-name">${escapeHTML(item.name)}</h3>
+        <p class="card-name-en">${escapeHTML(item.nameEn || '')}</p>
+        ${metaHTML}
+        <p class="card-desc">${escapeHTML(item.desc || '')}</p>
+        <div class="tags">${tags}</div>
+        <div class="card-foot">
+          <span class="dl">${count || '&nbsp;'}</span>
+          <button class="${btnClass}" data-install="${escapeHTML(item.name)}">${btnText}</button>
+        </div>
+      </article>
+    `;
+  }
+
   function bindCardEvents() {
-    // 点击卡片（除"安装方法"按钮和标签）→ 打开官网
+    // 点击卡片（除按钮和标签）→ 期刊跳最新，其他跳官网
     $grid.querySelectorAll('.card').forEach(card => {
       card.addEventListener('click', (e) => {
         if (e.target.closest('.btn-install')) return;
         if (e.target.closest('.tag')) return;
         const name = card.querySelector('.card-name').textContent;
         const item = findItem(state.activeCategory, name);
-        if (item?.url) window.open(item.url, '_blank', 'noopener,noreferrer');
+        if (!item) return;
+        const target = item.type === 'journal' && item.latestUrl ? item.latestUrl : item.url;
+        if (target) window.open(target, '_blank', 'noopener,noreferrer');
       });
     });
 
-    // 安装方法按钮
+    // 按钮：期刊 → 跳最新，其他 → 弹窗
     $grid.querySelectorAll('.btn-install').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        openModal(findItem(state.activeCategory, btn.dataset.install));
+        const item = findItem(state.activeCategory, btn.dataset.install);
+        if (!item) return;
+        if (item.type === 'journal') {
+          const target = item.latestUrl || item.url;
+          if (target) window.open(target, '_blank', 'noopener,noreferrer');
+        } else {
+          openModal(item);
+        }
       });
     });
 
@@ -219,7 +313,7 @@
     $modalUrl.href          = item.url;
     $modalUrl.textContent   = item.url;
     $modalOpen.href         = item.url;
-    $modalInstall.textContent = item.install || '暂无安装说明';
+    $modalInstall.textContent = item.install || '暂无说明';
     $modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
   }
@@ -243,7 +337,6 @@
         $modalCopy.textContent = '✓ 已复制';
         setTimeout(() => { $modalCopy.textContent = original; }, 1500);
       } catch (err) {
-        // 降级方案
         const ta = document.createElement('textarea');
         ta.value = text;
         document.body.appendChild(ta);
@@ -251,7 +344,7 @@
         try { document.execCommand('copy'); } catch (_) {}
         document.body.removeChild(ta);
         $modalCopy.textContent = '✓ 已复制';
-        setTimeout(() => { $modalCopy.textContent = '复制安装说明'; }, 1500);
+        setTimeout(() => { $modalCopy.textContent = '复制说明'; }, 1500);
       }
     });
   }
@@ -260,6 +353,7 @@
   function init() {
     renderStats();
     renderTabs();
+    renderSubTabs();
     renderGrid();
     bindSearch();
     bindModal();
