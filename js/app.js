@@ -62,12 +62,27 @@
 
   function getList(category, subTab) {
     let list = (DATA[category] || []).slice();
-    // 学术板块：按 type 过滤
+    // 学术板块：支持多种 subTab
     if (category === 'academic' && subTab && subTab !== 'all') {
+      if (subTab === 'search' || subTab === 'tracking' || subTab === 'portal') {
+        list = list.filter(it => it.type === subTab);
+      } else if (subTab === 'journal') {
+        list = list.filter(it => it.type === 'journal' || it.type === 'conference');
+      } else if (subTab.endsWith('-journal')) {
+        // 'transport-journal' | 'ai-journal' | 'autonomous-journal'
+        const field = subTab.replace('-journal', '');
+        list = list.filter(it =>
+          (it.type === 'journal' || it.type === 'conference') &&
+          (it.field || 'transport') === field
+        );
+      }
+    }
+    // 财经板块：按 type 过滤
+    if (category === 'finance' && subTab && subTab !== 'all') {
       list = list.filter(it => it.type === subTab);
     }
     return list.sort((a, b) => {
-      // 期刊按 IF 降序
+      // 学术期刊按 IF 降序
       if (category === 'academic') {
         const va = parseFloat(a.if) || 0;
         const vb = parseFloat(b.if) || 0;
@@ -139,9 +154,7 @@
     $subTabs.innerHTML = cat.subTabs
       .map(st => {
         const isActive = state.activeSubTab === st.key;
-        const count = st.key === 'all'
-          ? (DATA[cat.key] || []).length
-          : (DATA[cat.key] || []).filter(it => it.type === st.key).length;
+        const count = (DATA[cat.key] || []).filter(it => matchSubTab(it, cat.key, st.key)).length;
         return `
           <button class="sub-tab ${isActive ? 'active' : ''}" data-sub="${st.key}">
             <span>${st.icon}</span>
@@ -160,6 +173,26 @@
         renderGrid();
       });
     });
+  }
+
+  // sub-tab 匹配规则（与 getList 保持一致）
+  function matchSubTab(item, category, subTab) {
+    if (subTab === 'all') return true;
+    if (category === 'academic') {
+      if (subTab === 'search' || subTab === 'tracking' || subTab === 'portal') {
+        return item.type === subTab;
+      } else if (subTab === 'journal') {
+        return item.type === 'journal' || item.type === 'conference';
+      } else if (subTab.endsWith('-journal')) {
+        const field = subTab.replace('-journal', '');
+        return (item.type === 'journal' || item.type === 'conference') &&
+               (item.field || 'transport') === field;
+      }
+    }
+    if (category === 'finance') {
+      return item.type === subTab;
+    }
+    return true;
   }
 
   // ===== 卡片 =====
@@ -190,8 +223,8 @@
     const tags = (item.tags || [])
       .map(t => `<span class="tag ${state.activeTag === t ? 'tag-active' : ''}" data-tag="${escapeHTML(t)}">${escapeHTML(t)}</span>`)
       .join('');
-    const isJournal = item.type === 'journal';
-    const cardClass = `card ${rankClass} ${isJournal ? 'card-journal' : ''}`;
+    const isJournal = item.type === 'journal' || item.type === 'conference';
+    const cardClass = `card ${rankClass} ${isJournal ? 'card-journal' : ''} ${item.type === 'conference' ? 'card-conference' : ''} ${state.activeCategory === 'finance' ? 'card-finance' : ''}`;
 
     // 期刊专属：IF 徽章 / 出版方 / 直达最新
     let metaHTML = '';
@@ -218,9 +251,18 @@
       count = '📊 IF ' + escapeHTML(item.if);
     }
 
-    // 按钮文本：期刊 = "最新文章 →"，其他 = "安装方法 →"
-    const btnText = isJournal ? '📰 最新文章' : '安装方法 →';
-    const btnClass = isJournal ? 'btn-install btn-latest' : 'btn-install';
+    // 按钮文本：期刊/会议 = "最新文章 →"，财经 = "使用说明 →"，其他 = "安装方法 →"
+    let btnText, btnClass;
+    if (isJournal) {
+      btnText = item.type === 'conference' ? '📑 最新论文' : '📰 最新文章';
+      btnClass = 'btn-install btn-latest';
+    } else if (state.activeCategory === 'finance') {
+      btnText = '💡 使用说明';
+      btnClass = 'btn-install btn-finance';
+    } else {
+      btnText = '安装方法 →';
+      btnClass = 'btn-install';
+    }
 
     return `
       <article class="${cardClass}" style="--card-bg:${escapeHTML(item.color || '#7c5cff')}22; --card-glow:${escapeHTML(item.color || '#7c5cff')}">
@@ -248,18 +290,20 @@
         const name = card.querySelector('.card-name').textContent;
         const item = findItem(state.activeCategory, name);
         if (!item) return;
-        const target = item.type === 'journal' && item.latestUrl ? item.latestUrl : item.url;
+        const isJournalLike = item.type === 'journal' || item.type === 'conference';
+        const target = isJournalLike && item.latestUrl ? item.latestUrl : item.url;
         if (target) window.open(target, '_blank', 'noopener,noreferrer');
       });
     });
 
-    // 按钮：期刊 → 跳最新，其他 → 弹窗
+    // 按钮：期刊/会议 → 跳最新，其他 → 弹窗
     $grid.querySelectorAll('.btn-install').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const item = findItem(state.activeCategory, btn.dataset.install);
         if (!item) return;
-        if (item.type === 'journal') {
+        const isJournalLike = item.type === 'journal' || item.type === 'conference';
+        if (isJournalLike) {
           const target = item.latestUrl || item.url;
           if (target) window.open(target, '_blank', 'noopener,noreferrer');
         } else {
