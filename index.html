@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Hub · 大模型 / MCP / Skills / 插件 一站式导航</title>
+  <meta name="description" content="聚合最热门的 AI 大模型、MCP Servers、Skills 和浏览器/编辑器插件，附安装方法。" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9C%A8%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+  <!-- 背景动效层 -->
+  <div class="bg-orbs" aria-hidden="true">
+    <span class="orb orb-1"></span>
+    <span class="orb orb-2"></span>
+    <span class="orb orb-3"></span>
+  </div>
+
+  <!-- 顶部导航 -->
+  <header class="site-header">
+    <div class="brand">
+      <span class="brand-logo">✨</span>
+      <div class="brand-text">
+        <h1>AI Hub</h1>
+        <p>大模型 · MCP · Skills · 插件 一站式导航</p>
+      </div>
+    </div>
+    <div class="header-stats" id="headerStats"></div>
+  </header>
+
+  <!-- 搜索 & 分类 -->
+  <section class="toolbar">
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input
+        id="searchInput"
+        type="search"
+        placeholder="搜索 AI 模型、MCP、技能或插件…"
+        autocomplete="off"
+      />
+      <button id="clearSearch" class="clear-btn" title="清空">✕</button>
+    </div>
+
+    <nav class="tabs" id="tabs" role="tablist"></nav>
+  </section>
+
+  <!-- 卡片网格 -->
+  <main class="grid" id="grid"></main>
+
+  <!-- 空状态 -->
+  <div class="empty-state hidden" id="emptyState">
+    <div class="empty-icon">🪐</div>
+    <p>没有匹配的资源，试试别的关键词？</p>
+  </div>
+
+  <!-- 安装说明弹窗 -->
+  <div class="modal hidden" id="modal" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" id="modalBackdrop"></div>
+    <div class="modal-card">
+      <header class="modal-head">
+        <div class="modal-title">
+          <span class="modal-emoji" id="modalEmoji">📦</span>
+          <div>
+            <h2 id="modalName">名称</h2>
+            <p id="modalDesc" class="muted"></p>
+          </div>
+        </div>
+        <button class="modal-close" id="modalClose" title="关闭">✕</button>
+      </header>
+      <section class="modal-section">
+        <h3>🔗 官网 / 仓库</h3>
+        <a id="modalUrl" class="modal-link" target="_blank" rel="noopener noreferrer"></a>
+      </section>
+      <section class="modal-section">
+        <h3>🛠 安装方法</h3>
+        <pre id="modalInstall" class="install-block"></pre>
+      </section>
+      <footer class="modal-foot">
+        <button class="btn btn-secondary" id="modalCopy">复制安装说明</button>
+        <a id="modalOpen" class="btn btn-primary" target="_blank" rel="noopener noreferrer">前往官网 →</a>
+      </footer>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <p>AI Hub · 数据基于公开榜单整理 · 下载量为近似值，仅供参考</p>
+  </footer>
+
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
